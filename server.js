@@ -6,64 +6,115 @@ import helmet from "helmet";
 import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
-import xss from "xss-clean";
 import hpp from "hpp";
 
-// Load environment variables
+import authRoutes from "./routes/auth.routes.js";
+
+/* ============================
+   ENV CONFIG
+============================ */
 dotenv.config();
 
 const app = express();
 
-// Middlewares
+/* ============================
+   GLOBAL MIDDLEWARE
+============================ */
+
+// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+
+// Security
 app.use(helmet());
-app.use(morgan("dev"));
-app.use(mongoSanitize());
-app.use(xss());
+app.use((req, res, next) => {
+  if (req.body) req.body = mongoSanitize.sanitize(req.body);
+  if (req.params) req.params = mongoSanitize.sanitize(req.params);
+  next();
+});
 app.use(hpp());
 
-// Rate Limiter
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: "Too many requests from this IP, please try again later.",
+// Logging
+if (process.env.NODE_ENV !== "test") {
+  app.use(morgan("dev"));
+}
+
+// CORS (lock this down for SaaS)
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    credentials: true,
+  })
+);
+
+/* ============================
+   RATE LIMITING
+============================ */
+
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
 });
-app.use(limiter);
 
-// Basic Route
-app.get("/", (req, res) => {
-  res.status(200).json({
-    message: "Healthcare Management API is running.",
-  });
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: "Too many auth attempts, try again later.",
 });
 
-// TODO: Add your routes here
-// app.use("/api/v1/auth", authRoutes);
-// app.use("/api/v1/patients", patientRoutes);
+app.use(globalLimiter);
 
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
+/* ============================
+   HEALTH CHECK
+============================ */
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+/* ============================
+   ROUTES
+============================ */
+
+app.use("/api/auth", authLimiter, authRoutes);
+
+/* ============================
+   ERROR HANDLER
+============================ */
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+
   res.status(err.status || 500).json({
     status: "error",
-    message: err.message || "Server Error",
+    message: err.message || "Internal Server Error",
   });
 });
 
-// Connect to MongoDB and Start Server
+/* ============================
+   DATABASE & SERVER
+============================ */
+
 const PORT = process.env.PORT || 5000;
-const DB_URI = process.env.MONGO_URI ;
+const DB_URI = process.env.MONGO_URI;
 
 mongoose
   .connect(DB_URI)
   .then(() => {
-    console.log("MongoDB connected");
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    console.log("✅ MongoDB connected");
+
+    const server = app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+
+    // Graceful shutdown
+    process.on("SIGINT", async () => {
+      console.log("🛑 Shutting down...");
+      await mongoose.connection.close();
+      server.close(() => process.exit(0));
     });
   })
   .catch((err) => {
-    console.error("MongoDB connection error:", err);
+    console.error("❌ MongoDB connection error:", err);
+    process.exit(1);
   });
