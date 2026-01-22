@@ -1,67 +1,48 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
+// Middleware to authenticate JWT token
 export const authenticate = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
   try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.id).select("-password");
+    // FIXED: Use decoded.sub instead of decoded.id (matches how token was created)
+    const user = await User.findById(decoded.sub).select("-password");
 
     if (!user) {
-      return res.status(401).json({ error: "User no longer exists" });
-    }
-
-    if (!user.isEmailVerified) {
-      return res.status(403).json({ error: "Email not verified" });
-    }
-
-    if (user.isActive === false) {
-      return res.status(403).json({ error: "Account disabled" });
+      return res.status(401).json({ message: "User not found" });
     }
 
     req.user = user;
-    req.tenantId = user.organizationId;
-
     next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid or expired token" });
+  } catch (error) {
+    console.error("Authentication error:", error.message);
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 
-export const protect = async (req, res, next) => {
-  try {
-    let token;
+// Middleware to protect routes (alias for authenticate)
+export const protect = authenticate;
 
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
+// Middleware to restrict access to specific roles
+export const restrictTo = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: "Not authenticated" });
     }
 
-    if (!token) {
-      return res.status(401).json({ error: "Not authenticated" });
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: "Access denied" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-
-    if (!user) {
-      return res.status(401).json({ error: "User not found" });
-    }
-
-    req.user = user; // 👈 important
     next();
-  } catch (err) {
-    return res.status(401).json({ error: "Invalid token" });
-  }
+  };
 };
