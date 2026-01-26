@@ -10,37 +10,34 @@ import hpp from "hpp";
 
 import authRoutes from "./routes/auth.routes.js";
 
-/* ============================
-   ENV CONFIG
-============================ */
 dotenv.config();
 
 const app = express();
+
+// ✅ TRUST VERCEL PROXY
 app.set("trust proxy", 1);
 
 /* ============================
    GLOBAL MIDDLEWARE
 ============================ */
 
-// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Security
 app.use(helmet());
-app.use((req, res, next) => {
+
+app.use((req, _res, next) => {
   if (req.body) req.body = mongoSanitize.sanitize(req.body);
   if (req.params) req.params = mongoSanitize.sanitize(req.params);
   next();
 });
+
 app.use(hpp());
 
-// Logging
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan("dev"));
 }
 
-// CORS (lock this down for SaaS)
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
@@ -55,11 +52,16 @@ app.use(
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
   message: "Too many auth attempts, try again later.",
 });
 
@@ -108,7 +110,6 @@ mongoose
       console.log(`🚀 Server running on port ${PORT}`);
     });
 
-    // Graceful shutdown
     process.on("SIGINT", async () => {
       console.log("🛑 Shutting down...");
       await mongoose.connection.close();
