@@ -1,0 +1,7 @@
+{
+  "version": 2,
+  "routes": [
+    { "src": "/server/(.*)", "dest": "/primehealth-server/server.js" },
+    { "src": "/(.*)", "dest": "/primehealth-client/dist/$1" }
+  ]
+}
