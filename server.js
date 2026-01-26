@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import mongoSanitize from "express-mongo-sanitize";
 import hpp from "hpp";
 
@@ -14,8 +14,8 @@ dotenv.config();
 
 const app = express();
 
-// ✅ TRUST VERCEL PROXY
-app.set("trust proxy", 1);
+// 🔥 TRUST VERCEL PROXY (use true)
+app.set("trust proxy", true);
 
 /* ============================
    GLOBAL MIDDLEWARE
@@ -52,8 +52,14 @@ app.use(
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
+
   standardHeaders: true,
   legacyHeaders: false,
+
+  validate: {
+    xForwardedForHeader: false,
+    forwardedHeader: false,
+  },
 });
 
 const authLimiter = rateLimit({
@@ -61,7 +67,11 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: ipKeyGenerator,
+  validate: {
+    xForwardedForHeader: false,
+    forwardedHeader: false,
+  },
   message: "Too many auth attempts, try again later.",
 });
 
