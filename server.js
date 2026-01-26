@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 
 /**
- * 🔥 MUST be true on Vercel / serverless
+ * 🔥 REQUIRED when running behind Vercel / proxies / load balancers
  */
 app.set("trust proxy", true);
 
@@ -48,31 +48,31 @@ app.use(
 );
 
 /* ============================
-   RATE LIMITING (FIXED)
+   RATE LIMITING (CLEAN & SAFE)
 ============================ */
 
-const sharedRateLimitOptions = {
+/**
+ * Shared options
+ * - Uses Express-trusted proxy IPs
+ * - No validation overrides (avoids ERR_ERL_* errors)
+ */
+const rateLimitOptions = {
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipKeyGenerator,
-
-  // 🔥 REQUIRED FOR VERCEL / PROXIES
-  validate: {
-    forwardedHeader: false,
-  },
 };
 
 const globalLimiter = rateLimit({
-  ...sharedRateLimitOptions,
+  ...rateLimitOptions,
   windowMs: 15 * 60 * 1000,
   max: 300,
 });
 
 const authLimiter = rateLimit({
-  ...sharedRateLimitOptions,
+  ...rateLimitOptions,
   windowMs: 15 * 60 * 1000,
   max: 20,
-  message: "Too many auth attempts, try again later.",
+  message: "Too many authentication attempts, try again later.",
 });
 
 app.use(globalLimiter);
@@ -92,7 +92,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/auth", authLimiter, authRoutes);
 
 /* ============================
-   ERROR HANDLER
+   GLOBAL ERROR HANDLER
 ============================ */
 
 app.use((err, _req, res, _next) => {
@@ -114,6 +114,7 @@ mongoose
   .connect(DB_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
+
     const server = app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
