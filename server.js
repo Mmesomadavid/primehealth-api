@@ -58,7 +58,6 @@ const sharedRateLimitOptions = {
 
   // 🔥 REQUIRED FOR VERCEL / PROXIES
   validate: {
-    xForwardedForHeader: false,
     forwardedHeader: false,
   },
 };
