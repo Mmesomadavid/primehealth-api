@@ -51,11 +51,6 @@ app.use(
    RATE LIMITING (CLEAN & SAFE)
 ============================ */
 
-/**
- * Shared options
- * - Uses Express-trusted proxy IPs
- * - No validation overrides (avoids ERR_ERL_* errors)
- */
 const rateLimitOptions = {
   standardHeaders: true,
   legacyHeaders: false,
@@ -78,11 +73,25 @@ const authLimiter = rateLimit({
 app.use(globalLimiter);
 
 /* ============================
-   HEALTH CHECK
+   ROOT, HEALTH & FAVICON
 ============================ */
+
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    message: "PrimeHealth API is running 🚀",
+  });
+});
 
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+app.get("/favicon.ico", (_req, res) => {
+  res.status(204).end();
+});
+
+app.get("/favicon.png", (_req, res) => {
+  res.status(204).end();
 });
 
 /* ============================
